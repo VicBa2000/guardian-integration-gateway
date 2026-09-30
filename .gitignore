@@ -1,0 +1,11 @@
+# Secretos: NUNCA al repo (ver .env.example)
+.env
+
+# Audit log local (contiene originales cifrados)
+data/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/

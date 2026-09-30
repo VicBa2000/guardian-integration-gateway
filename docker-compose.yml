@@ -1,0 +1,14 @@
+services:
+  gateway:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file: .env          # AUDIT_ENCRYPTION_KEY y demas (ver .env.example)
+    volumes:
+      - ./data:/app/data    # el audit log sobrevive a "docker compose down"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped

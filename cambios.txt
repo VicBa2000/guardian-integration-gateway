@@ -1,0 +1,104 @@
+Bitacora de cambios y decisiones — The Guardian Integration Gateway
+====================================================================
+
+[2026-09-29] Decision: stack Python + FastAPI (uvicorn).
+  Motivo: async nativo (asyncio.sleep para el mock de 2s sin bloquear el
+  event loop) y validacion automatica del body con Pydantic (422).
+  Afecta: todo el proyecto. Registrado en CLAUDE.md.
+
+[2026-09-29] Esqueleto inicial (estructura, cuerpos pendientes)
+  - requirements.txt: fastapi, uvicorn[standard]
+  - app/__init__.py: paquete vacio
+  - app/schemas.py: InquiryRequest / InquiryResponse (campos pendientes)
+  - app/main.py: app FastAPI + POST /secure-inquiry (cuerpo pendiente)
+  Afecta: endpoint (base para sanitizer, mock IA, audit, circuit breaker).
+
+[2026-09-30] Sanitizer — red 1 (app/sanitizer.py: PII_PATTERNS, sanitize)
+  - EMAIL, CREDIT_CARD, SSN -> <REDACTED: TYPE>, aplicados en ese orden.
+  - Decision: (?<!\d)/(?!\d) en vez de \b para tarjeta y SSN.
+    Motivo: \b no separa digito de letra; "123456789abc" se filtraba.
+    Costo aceptado: "0123-45-6789" (digito extra) no es SSN para la red 1
+    (lo atrapa la red 2).
+  - Decision: tarjeta por grupos (?:\d{4}[ -]?){3}\d{1,7}; separador solo
+    ENTRE grupos. Motivo: el patron anterior (separador entre cualquier
+    digito, greedy) se comia digitos vecinos: en
+    "4111111111111111 123-45-6789" filtraba "-45-6789" (encontrado por test).
+    Costo aceptado: formatos 4-6-5 (Amex) caen en la red 2.
+  Afecta: sanitizer.
+
+[2026-09-30] Sanitizer — red 2 / fail-closed (find_residual_pii, redact_residual)
+  - Detector residual sobre el texto YA redactado: 9+ digitos con cualquier
+    separador, y cualquier token con "@".
+  - Modo B "redact" (default): sospechosos -> <REDACTED: SUSPECTED_PII>.
+    Modo A "block": 422 sin llamar al LLM (se conectara en main.py via
+    RESIDUAL_PII_MODE). Motivo: la fuga de PII tiene costo legal; ante la
+    duda, no sale. B por default para no rechazar mensajes legitimos
+    (telefonos, folios), a costa de redactar de mas.
+  - Regla: el resultado de find_residual_pii ES PII en claro. Solo en
+    memoria; nunca en respuestas (ni en el 422), logs ni audit en plano.
+  - Limite conocido: regex no detecta nombres, direcciones ni PII escrita
+    con palabras; requeriria NER / clasificador (fuera de alcance).
+  Afecta: sanitizer, endpoint (pendiente).
+
+[2026-09-30] Tests (tests/test_sanitizer.py) + pytest en requirements.txt
+  - 7 casos que deben redactar (falsos negativos), 4 que no deben tocarse
+    (falsos positivos), 3 de la red 2. 14/14 pasan.
+  Afecta: sanitizer.
+
+[2026-09-30] Endpoint: modo residual (app/main.py)
+  - RESIDUAL_PII_MODE=redact|block, leido y validado UNA vez al arrancar.
+    Normaliza (strip/lower); vacia = default "redact"; valor invalido (ej.
+    "blok") -> ValueError y la app no arranca (fail fast: un typo no debe
+    caer en silencio a otro modo).
+  - block -> 422 con mensaje generico (sin la PII detectada).
+  Afecta: endpoint.
+
+[2026-09-30] Mock IA (app/mock_ai.py)
+  - await asyncio.sleep(2) (no bloquea el event loop: 5 llamadas
+    concurrentes = ~2s, no 10s). Falla con probabilidad MOCK_AI_FAILURE_RATE
+    (0-1, default 0, invalido -> no arranca). Excepcion propia MockAIError.
+  Afecta: mock IA.
+
+[2026-09-30] Circuit breaker (app/circuit_breaker.py + tests)
+  - Estados closed/open/half_open. Abre tras 3 fallos CONSECUTIVOS (un
+    exito reinicia el contador). Abierto -> CircuitOpenError al instante,
+    sin llamar al servicio.
+  - Decisiones (el enunciado no las fija):
+    * Fallback = HTTP 503 {"userId", "message": "Service Busy"} (misma forma
+      que la respuesta normal). 200 mentiria sobre el resultado.
+    * Re-cierre: half_open a los 30s; UNA sola llamada de prueba (evita
+      thundering herd). Prueba falla -> reabre; exito -> closed.
+    * Fallo = excepcion o timeout de 5s (asyncio.wait_for).
+    * Solo CircuitOpenError/MockAIError/TimeoutError -> 503; un bug propio
+      sale como 500 y no se disfraza de "Service Busy".
+  - is_trial local: solo la llamada que tomo la bandera de prueba la libera.
+  - Sin locks: asyncio es un hilo y no hay await entre leer/escribir estado.
+  - Limites: estado en memoria POR PROCESO (se pierde al reiniciar; con N
+    workers/replicas hay N breakers). Compartido requeriria Redis o similar.
+  Afecta: circuit breaker, endpoint.
+
+[2026-09-30] Audit log (app/audit.py + tests)
+  - JSON Lines en AUDIT_LOG_PATH (default data/audit_log.jsonl). Decision:
+    JSONL en vez de un arreglo JSON: agregar una linea vs reescribir todo el
+    archivo (y no corromper el log completo si el proceso muere).
+  - Registro: timestamp UTC, userId, original_encrypted (Fernet), redacted,
+    outcome (answered|blocked|service_busy), residual_pii_count (solo conteo).
+  - Se audita TODA salida, incluidas bloqueadas y fallidas.
+  - Fernet (AES + HMAC): detecta manipulacion del token. Llave SOLO por
+    AUDIT_ENCRYPTION_KEY; ausente/invalida -> no arranca.
+  - Escritura con asyncio.to_thread + asyncio.Lock: no bloquea el event loop
+    y las lineas concurrentes no se mezclan.
+  - Bug evitado: en modo block el texto auditado en plano debe pasar por la
+    red 2 (redact_residual) o guardaria la PII sospechosa en claro.
+  Afecta: audit, endpoint.
+
+[2026-09-30] Docker (Dockerfile, docker-compose.yml, .dockerignore, .gitignore, .env.example)
+  - python:3.11-slim; requirements antes que el codigo (cache de capas);
+    usuario no-root; uvicorn --host 0.0.0.0; 1 worker a proposito (breaker
+    en memoria).
+  - Volumen ./data:/app/data: el audit log sobrevive a down/up (verificado).
+  - .env fuera de la imagen (.dockerignore) y del repo (.gitignore); la llave
+    entra solo como variable de entorno en runtime.
+  - Nota: la llave y el log deben respaldarse JUNTOS; sin la llave los
+    originales cifrados son irrecuperables.
+  Afecta: infraestructura.

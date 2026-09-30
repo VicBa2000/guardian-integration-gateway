@@ -1,0 +1,24 @@
+AI-Augmented Project: The Guardian Integration Gateway - Have you read the instructions and are prepared to proceed? (Time Limit: 4-6 Hours. Explicitly required to use Cursor, Claude, Gemini or ChatGPT.) 
+
+Instruction: "You are explicitly REQUIRED to use Cursor, Claude, or ChatGPT. We want to see how you orchestrate the AI to handle security logic." The Task: Build a Secure Middleware Service Python/FastAPI  or Node.js/Express.
+
+1. The Endpoint:
+POST /secure-inquiry
+. Accepts a JSON body:
+{ userId: string, message: string }
+
+2. The Logic:
+◦ Step 1 (Sanitization): Use AI to generate a robust sanitizer that strips emails, credit cards, and SSNs (Social security Numbers or 9 numeric digits) from
+message and replaces them with
+<REDACTED: TYPE>. 
+
+ ◦ Step 2 (Mock AI Call): Simulate an external AI call (use a setTimeout of 2 seconds) that returns a "Generated Answer." 
+
+ ◦ Step 3 (Audit Log): Write the original message (encrypted) and the redacted message (plaintext) to a mock database (a JSON file is fine). 
+
+3. The Twist: The system must include a "Circuit Breaker." If the Mock AI Call fails 3 times in a row, the API should instantly return a fallback message ("Service Busy") without waiting for the timeout.
+
+Deploy your project in Docker:
+- Add your dockerfile/docker compose to the project.
+
+Record a video of your local environment show you project working and push the video to your github repo along with your code.
