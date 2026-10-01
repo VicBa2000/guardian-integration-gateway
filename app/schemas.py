@@ -1,4 +1,8 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+# Tope de entrada: acota el CPU de las regex por peticion (defensa ReDoS).
+# Mas largo -> 422 antes de que corra el sanitizer.
+MAX_MESSAGE_LENGTH = 5000
 
 
 class InquiryRequest(BaseModel):
@@ -6,7 +10,7 @@ class InquiryRequest(BaseModel):
     #    Respeta el nombre exacto del JSON: userId, no user_id.
 
     userId: str
-    message: str
+    message: str = Field(max_length=MAX_MESSAGE_LENGTH)
 
 
 class InquiryResponse(BaseModel):

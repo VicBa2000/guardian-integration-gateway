@@ -110,3 +110,17 @@ Bitacora de cambios y decisiones — The Guardian Integration Gateway
   - Renombrado sin espacios/parentesis para que el link Markdown no se rompa.
   - demo/ en .dockerignore: no viaja en el build context de Docker.
   Afecta: entregables, infraestructura.
+
+[2026-09-30] Fix ReDoS (app/sanitizer.py, app/schemas.py, tests/test_sanitizer.py, README.md)
+  - Hallado al llenar el Prompt Log (seccion 4): benchmark con entradas
+    hostiles. EMAIL tardaba 7.3 s con "a@a.a.a..." (80k chars) y \S+@\S+
+    2.2 s con 40k chars sin "@": backtracking O(n^2), y sanitize() corre en
+    el event loop (una peticion grande congela a todas).
+  - EMAIL: \b inicial -> (?<![A-Za-z0-9._%+-]); \S+@\S+ -> (?<!\S)\S+@\S+.
+    Solo arrancan al inicio de la racha/token: mismo resultado, tiempo lineal.
+    Se descarto acotar con {1,64}: un local part largo dejaria su prefijo
+    sin redactar.
+  - message: max_length=5000 (Pydantic) -> 422 antes del sanitizer.
+  - Tests: 3 entradas hostiles < 0.5 s (2 fallan con las regex viejas,
+    verificado) + mensaje sobre el limite rechazado. 29/29 pasan.
+  Afecta: sanitizer, endpoint.

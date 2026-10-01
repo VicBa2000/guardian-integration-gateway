@@ -96,6 +96,9 @@ no tiene el formato exacto de un SSN, así que el primer filtro lo deja pasar, p
 lo detecta como sospechoso. Con la configuración por defecto se tapa; en modo `block`
 recibes un `422`. En ningún caso la respuesta de error repite el dato detectado.
 
+**Mensaje demasiado largo.** `message` acepta hasta 5000 caracteres; uno más largo recibe
+un `422` antes de que corra el sanitizer (acota el costo de las regex por petición).
+
 **Leer un mensaje original de la bitácora** (solo para investigar un incidente; necesitas
 la llave):
 
@@ -274,6 +277,9 @@ success closes it, failure re-opens it.
 format (net 1 ignores it), but net 2 flags it: redacted as `<REDACTED: SUSPECTED_PII>`
 (default) or rejected with `422` in `block` mode. The `422` body never includes the
 detected value.
+
+**Oversized message.** `message` is capped at 5000 characters; a longer one gets a `422`
+before the sanitizer runs (bounds the regex cost per request).
 
 **Reading an original from the audit log** (investigation only, needs the key):
 

@@ -1,6 +1,10 @@
+import time
+
 import pytest
+from pydantic import ValidationError
 
 from app.sanitizer import find_residual_pii, redact_residual, sanitize
+from app.schemas import MAX_MESSAGE_LENGTH, InquiryRequest
 
 E, C, S = "<REDACTED: EMAIL>", "<REDACTED: CREDIT_CARD>", "<REDACTED: SSN>"
 
@@ -33,3 +37,18 @@ def test_residual_catches_near_pii(raw):
     clean = sanitize(raw)
     assert find_residual_pii(clean)
     assert "<REDACTED: SUSPECTED_PII>" in redact_residual(clean)
+
+
+# ReDoS: entradas hostiles largas deben procesarse en tiempo lineal. Antes del
+# fix, 40k caracteres tardaban segundos (backtracking O(n^2)).
+@pytest.mark.parametrize("raw", ["a@" + "a." * 50_000, "a" * 100_000, "1 " * 50_000],
+                         ids=["email-dots", "no-at", "spaced-digits"])
+def test_hostile_input_is_fast(raw):
+    start = time.perf_counter()
+    redact_residual(sanitize(raw))
+    assert time.perf_counter() - start < 0.5
+
+
+def test_message_over_limit_is_rejected():
+    with pytest.raises(ValidationError):
+        InquiryRequest(userId="u1", message="x" * (MAX_MESSAGE_LENGTH + 1))
