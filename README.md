@@ -22,6 +22,10 @@ POST /secure-inquiry  { "userId": "...", "message": "..." }
  3. Auditoría (JSON Lines): mensaje original cifrado + mensaje limpio legible
 ```
 
+## Demo
+
+Video del proyecto corriendo en local: [demo/guardian-demo.mp4](demo/guardian-demo.mp4)
+
 ## Cómo levantarlo
 
 Necesitas Docker. Primero crea tu archivo de configuración y genera la llave de cifrado:
@@ -205,6 +209,10 @@ POST /secure-inquiry  { "userId": "...", "message": "..." }
         ▼
  3. Audit log (JSON Lines): original ENCRYPTED (Fernet) + redacted in plain text
 ```
+
+### Demo
+
+Local run walkthrough: [demo/guardian-demo.mp4](demo/guardian-demo.mp4)
 
 ### Quick start (Docker)
 

@@ -102,3 +102,11 @@ Bitacora de cambios y decisiones — The Guardian Integration Gateway
   - Nota: la llave y el log deben respaldarse JUNTOS; sin la llave los
     originales cifrados son irrecuperables.
   Afecta: infraestructura.
+
+[2026-09-30] Video demo (demo/guardian-demo.mp4, README.md, .dockerignore)
+  - Original de 105 MiB > limite de 100 MiB por archivo de GitHub (push
+    rechazado). Re-exportado desde CapCut a ~64 MiB. Se descarto Git LFS:
+    obliga al evaluador a tener LFS y la cuota gratis es 1 GB/mes.
+  - Renombrado sin espacios/parentesis para que el link Markdown no se rompa.
+  - demo/ en .dockerignore: no viaja en el build context de Docker.
+  Afecta: entregables, infraestructura.
